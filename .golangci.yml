@@ -1,0 +1,18 @@
+# golangci-lint v1.64.x — pinned in ./test via go install ...@v1.64.8
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gofmt
+    - govet
+    - gosimple
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+
+issues:
+  max-same-issues: 50

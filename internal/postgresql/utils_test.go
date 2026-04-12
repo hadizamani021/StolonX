@@ -59,7 +59,7 @@ func TestParseTimelineHistory(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if !reflect.DeepEqual(tlsh, tt.tlsh) {
-				t.Errorf(spew.Sprintf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh))
+				t.Error(spew.Sprintf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh))
 			}
 		}
 	}

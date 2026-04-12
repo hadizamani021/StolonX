@@ -109,7 +109,7 @@ func TestParseConfig(t *testing.T) {
 				t.Errorf("#%d: got no error, wanted error: %v", i, tt.err)
 			}
 			if !reflect.DeepEqual(cfg, tt.cfg) {
-				t.Errorf(spew.Sprintf("#%d: wrong config: got: %#v, want: %#v", i, cfg, tt.cfg))
+				t.Error(spew.Sprintf("#%d: wrong config: got: %#v, want: %#v", i, cfg, tt.cfg))
 			}
 		}
 

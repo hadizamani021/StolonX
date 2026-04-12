@@ -83,8 +83,8 @@ fi
 
 
 echo "Checking with golangci-lint"
-curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${BINDIR} v1.23.6
-${BINDIR}/golangci-lint run --deadline 5m
+GOBIN="${BINDIR}" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+${BINDIR}/golangci-lint run --timeout 5m
 
 echo "Running tests"
 go test -timeout 3m ${COVER} $@ ${PACKAGES} ${RACE}
