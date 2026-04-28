@@ -77,6 +77,34 @@ func init() {
 	}
 }
 
+func keeperCanBeMaster(spec *cluster.ClusterSpec, k *cluster.Keeper) bool {
+	if k == nil {
+		return false
+	}
+	if spec.MasterEligibilitySelector != nil && len(spec.MasterEligibilitySelector.MatchLabels) > 0 {
+		return labelsMatchSelector(k.Status.Labels, spec.MasterEligibilitySelector)
+	}
+
+	//backward compatibility
+	if k.Status.CanBeMaster != nil {
+		return *k.Status.CanBeMaster
+	}
+	return true
+}
+
+func labelsMatchSelector(labels map[string]string, selectors *cluster.LabelSelector) bool {
+	if selectors == nil {
+		return true
+	}
+	for key, expected := range selectors.MatchLabels {
+		actual, ok := labels[key]
+		if !ok || actual != expected {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Sentinel) electionLoop(ctx context.Context) {
 	for {
 		log.Infow("Trying to acquire sentinels leadership")
@@ -232,6 +260,7 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 		if ki, ok := keepersInfo[keeperUID]; ok {
 			k.Status.CanBeMaster = ki.CanBeMaster
 			k.Status.CanBeSynchronousReplica = ki.CanBeSynchronousReplica
+			k.Status.Labels = ki.Labels
 		}
 	}
 
@@ -737,8 +766,22 @@ func (s *Sentinel) findBestStandbys(cd *cluster.ClusterData, masterDB *cluster.D
 func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster.DB) []*cluster.DB {
 	bestNewMasters := []*cluster.DB{}
 	for _, db := range s.findBestStandbys(cd, masterDB) {
-		if k, ok := cd.Keepers[db.Spec.KeeperUID]; ok && (k.Status.CanBeMaster != nil && !*k.Status.CanBeMaster) {
-			log.Infow("ignoring keeper since it cannot be master (--can-be-master=false)", "db", db.UID, "keeper", db.Spec.KeeperUID)
+		k, ok := cd.Keepers[db.Spec.KeeperUID]
+		if !ok {
+			log.Infow(
+				"ignoring keeper since it does not exist in cluster data",
+				"db", db.UID,
+				"keeper", db.Spec.KeeperUID,
+			)
+			continue
+		}
+		if !keeperCanBeMaster(cd.Cluster.Spec, k) {
+			log.Infow(
+				"ignoring keeper since its labels do not match cluster eligibility selectors or it cannot be master (--can-be-master=false)",
+				"db", db.UID,
+				"keeper", db.Spec.KeeperUID,
+				"labels", k.Status.Labels,
+			)
 			continue
 		}
 
