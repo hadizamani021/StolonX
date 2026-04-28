@@ -34,6 +34,210 @@ var curUID int
 
 var now = time.Now()
 
+func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
+	canBeMaster := true
+	cannotBeMaster := false
+
+	tests := []struct {
+		name string
+		spec *cluster.ClusterSpec
+		keeper *cluster.Keeper
+		want bool
+	}{
+		{
+			name: "nil keeper is false",
+			spec: &cluster.ClusterSpec{},
+			keeper: nil,
+			want: false,
+		},
+		{
+			name: "no selector falls back to canBeMaster true",
+			spec: &cluster.ClusterSpec{},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{
+					CanBeMaster: &canBeMaster,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no selector falls back to canBeMaster false",
+			spec: &cluster.ClusterSpec{},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{
+					CanBeMaster: &cannotBeMaster,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no selector and nil canBeMaster defaults true",
+			spec: &cluster.ClusterSpec{},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{},
+			},
+			want: true,
+		},
+		{
+			name: "matching selector is true",
+			spec: &cluster.ClusterSpec{
+				MasterEligibilitySelector: &cluster.LabelSelector{
+					MatchLabels: map[string]string{
+						"topology.kubernetes.io/zone": "zone-a",
+					},
+				},
+			},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{
+					CanBeMaster: &cannotBeMaster,
+					Labels: map[string]string{
+						"topology.kubernetes.io/zone": "zone-a",
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "non matching selector is false even if canBeMaster true",
+			spec: &cluster.ClusterSpec{
+				MasterEligibilitySelector: &cluster.LabelSelector{
+					MatchLabels: map[string]string{
+						"topology.kubernetes.io/zone": "zone-a",
+					},
+				},
+			},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{
+					CanBeMaster: &canBeMaster,
+					Labels: map[string]string{
+						"topology.kubernetes.io/zone": "zone-b",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "nil labels do not match non empty selector",
+			spec: &cluster.ClusterSpec{
+				MasterEligibilitySelector: &cluster.LabelSelector{
+					MatchLabels: map[string]string{
+						"topology.kubernetes.io/zone": "zone-a",
+					},
+				},
+			},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{
+					Labels: nil,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "empty selector falls back to canBeMaster",
+			spec: &cluster.ClusterSpec{
+				MasterEligibilitySelector: &cluster.LabelSelector{
+					MatchLabels: map[string]string{},
+				},
+			},
+			keeper: &cluster.Keeper{
+				Status: cluster.KeeperStatus{
+					CanBeMaster: &cannotBeMaster,
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := keeperCanBeMaster(tt.spec, tt.keeper)
+			if got != tt.want {
+				t.Fatalf("keeperCanBeMaster() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLabelsMatchSelector(t *testing.T) {
+	tests := []struct {
+		name string
+		labels map[string]string
+		selector *cluster.LabelSelector
+		want bool
+	}{
+		{
+			name: "nil selector matches",
+			labels: nil,
+			selector: nil,
+			want: true,
+		},
+		{
+			name: "nil labels match empty selector",
+			labels: nil,
+			selector: &cluster.LabelSelector{},
+			want: true,
+		},
+		{
+			name: "nil labels do not match non empty selector",
+			labels: nil,
+			selector: &cluster.LabelSelector{
+				MatchLabels: map[string]string{
+					"zone": "a",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "all labels match",
+			labels: map[string]string{
+				"zone": "a",
+				"disk": "ssd",
+			},
+			selector: &cluster.LabelSelector{
+				MatchLabels: map[string]string{
+					"zone": "a",
+					"disk": "ssd",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "missing label does not match",
+			labels: map[string]string{
+				"zone": "a",
+			},
+			selector: &cluster.LabelSelector{
+				MatchLabels: map[string]string{
+					"zone": "a",
+					"disk": "ssd",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "different value does not match",
+			labels: map[string]string{
+				"zone": "b",
+			},
+			selector: &cluster.LabelSelector{
+				MatchLabels: map[string]string{
+					"zone": "a",
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := labelsMatchSelector(tt.labels, tt.selector)
+			if got != tt.want {
+				t.Fatalf("labelsMatchSelector() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUpdateCluster(t *testing.T) {
 	tests := []struct {
 		cd    *cluster.ClusterData

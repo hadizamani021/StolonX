@@ -2143,3 +2143,177 @@ func TestSyncStandbyNotInSync(t *testing.T) {
 func TestSyncStandbyNotInSync0(t *testing.T) {
 	testSyncStandbyNotInSync(t, true)
 }
+
+func TestFailoverWithMasterEligibilitySelector(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore := setupStore(t, dir)
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+
+	clusterName := uuid.Must(uuid.NewV4()).String()
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbyLag:      cluster.Uint32P(50 * 1024),
+		UsePgrewind:        cluster.BoolP(false),
+		PGParameters:       defaultPGParameters,
+		MasterEligibilitySelector: &cluster.LabelSelector{
+			MatchLabels: map[string]string{
+				"zone": "b",
+			},
+		},
+	}
+
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	tks := testKeepers{}
+	tss := testSentinels{}
+
+	tkA, err := NewTestKeeperWithID(
+		t,
+		dir,
+		"keepera",
+		clusterName,
+		pgSUUsername,
+		pgSUPassword,
+		pgReplUsername,
+		pgReplPassword,
+		tstore.storeBackend,
+		storeEndpoints,
+		"--labels=zone=a",
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tkA.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tks[tkA.uid] = tkA
+
+	tkB, err := NewTestKeeperWithID(
+		t,
+		dir,
+		"keeperb",
+		clusterName,
+		pgSUUsername,
+		pgSUPassword,
+		pgReplUsername,
+		pgReplPassword,
+		tstore.storeBackend,
+		storeEndpoints,
+		"--labels=zone=b",
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tkB.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tks[tkB.uid] = tkB
+
+	ts, err := NewTestSentinel(
+		t,
+		dir,
+		clusterName,
+		tstore.storeBackend,
+		storeEndpoints,
+		fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile),
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tss[ts.uid] = ts
+
+	tp, err := NewTestProxy(
+		t,
+		dir,
+		clusterName,
+		pgSUUsername,
+		pgSUPassword,
+		pgReplUsername,
+		pgReplPassword,
+		tstore.storeBackend,
+		storeEndpoints,
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tp.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	defer shutdown(tks, tss, tp, tstore)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	if len(standbys) != 1 {
+		t.Fatalf("expected one standby, got %d", len(standbys))
+	}
+	standby := standbys[0]
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	xLogPos, err := GetXLogPos(master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := WaitClusterSyncedXLogPos([]*TestKeeper{master, standby}, xLogPos, sm, 20*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Make sure labels reached KeeperStatus through keeper info -> sentinel.
+	cd, _, err := sm.GetClusterData(context.TODO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got := cd.Keepers[tkA.uid].Status.Labels["zone"]; got != "a" {
+		t.Fatalf("expected keeper %q zone label %q, got %q", tkA.uid, "a", got)
+	}
+	if got := cd.Keepers[tkB.uid].Status.Labels["zone"]; got != "b" {
+		t.Fatalf("expected keeper %q zone label %q, got %q", tkB.uid, "b", got)
+	}
+
+	// Stop current master. Only keeperB is eligible to become master.
+	t.Logf("Stopping current master keeper: %s", master.uid)
+	master.Stop()
+
+	if err := WaitClusterDataMaster(tkB.uid, sm, 30*time.Second); err != nil {
+		t.Fatalf("expected eligible keeper %q to become master", tkB.uid)
+	}
+	if err := tkB.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	c, err := getLines(t, tkB)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	if err := tp.WaitRightMaster(tkB, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
