@@ -72,6 +72,7 @@ type ClusterSpecNoDefaults struct {
 	PGParameters                     cluster.PGParameters      `json:"pgParameters,omitempty"`
 	PGHBA                            []string                  `json:"pgHBA,omitempty"`
 	AutomaticPgRestart               *bool                     `json:"automaticPgRestart,omitempty"`
+	MasterEligibilitySelector        *cluster.LabelSelector    `json:"masterEligibilitySelector,omitempty"`
 }
 
 type ClusterSpecDefaults struct {
@@ -105,6 +106,7 @@ type ClusterSpecDefaults struct {
 	PGParameters                     cluster.PGParameters      `json:"pgParameters"`
 	PGHBA                            []string                  `json:"pgHBA"`
 	AutomaticPgRestart               *bool                     `json:"automaticPgRestart"`
+	MasterEligibilitySelector        *cluster.LabelSelector    `json:"masterEligibilitySelector,omitempty"`
 }
 
 func spec(cmd *cobra.Command, args []string) {

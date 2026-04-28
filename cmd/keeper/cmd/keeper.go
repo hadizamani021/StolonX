@@ -116,6 +116,7 @@ type config struct {
 	canBeMaster             bool
 	canBeSynchronousReplica bool
 	disableDataDirLocking   bool
+	labels                  map[string]string
 }
 
 var cfg config
@@ -140,10 +141,10 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
-
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeMaster, "can-be-master", true, "prevent keeper from being elected as master")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.disableDataDirLocking, "disable-data-dir-locking", false, "disable locking on data dir. Warning! It'll cause data corruptions if two keepers are concurrently running with the same data dir.")
+	CmdKeeper.PersistentFlags().StringToStringVar(&cfg.labels, "labels", nil, "keeper labels, comma-separated key=value pairs")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
@@ -178,6 +179,17 @@ var managedPGParameters = []string{
 	"recovery_target_xid",
 	"recovery_target_timeline",
 	"recovery_target_action",
+}
+
+func cloneMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(m))
+	for k, v := range m {
+		cloned[k] = v
+	}
+	return cloned
 }
 
 func readPasswordFromFile(filepath string) (string, error) {
@@ -614,6 +626,7 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 
 		CanBeMaster:             p.canBeMaster,
 		CanBeSynchronousReplica: p.canBeSynchronousReplica,
+		Labels:                  cloneMap(p.cfg.labels),
 	}
 
 	// The time to live is just to automatically remove old entries, it's

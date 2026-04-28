@@ -198,6 +198,10 @@ type StandbySettings struct {
 
 type SUReplAccessMode string
 
+type LabelSelector struct {
+	MatchLabels map[string]string `json:"matchLabels,omitempty"`
+}
+
 const (
 	// Allow access from every host
 	SUReplAccessAll SUReplAccessMode = "all"
@@ -291,6 +295,7 @@ type ClusterSpec struct {
 	PGHBA []string `json:"pgHBA"`
 	// Enable automatic pg restart when pg parameters that requires restart changes
 	AutomaticPgRestart *bool `json:"automaticPgRestart"`
+	MasterEligibilitySelector *LabelSelector `json:"masterEligibilitySelector,omitempty"`
 }
 
 type ClusterStatus struct {
@@ -576,8 +581,9 @@ type KeeperStatus struct {
 
 	ForceFail bool `json:"forceFail,omitempty"`
 
-	CanBeMaster             *bool `json:"canBeMaster,omitempty"`
-	CanBeSynchronousReplica *bool `json:"canBeSynchronousReplica,omitempty"`
+	CanBeMaster             *bool             `json:"canBeMaster,omitempty"`
+	CanBeSynchronousReplica *bool             `json:"canBeSynchronousReplica,omitempty"`
+	Labels                  map[string]string `json:"labels,omitempty"`
 }
 
 type Keeper struct {

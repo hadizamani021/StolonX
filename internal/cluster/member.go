@@ -52,8 +52,9 @@ type KeeperInfo struct {
 
 	PostgresState *PostgresState `json:"postgresState,omitempty"`
 
-	CanBeMaster             *bool `json:"canBeMaster,omitempty"`
-	CanBeSynchronousReplica *bool `json:"canBeSynchronousReplica,omitempty"`
+	CanBeMaster             *bool             `json:"canBeMaster,omitempty"`
+	CanBeSynchronousReplica *bool             `json:"canBeSynchronousReplica,omitempty"`
+	Labels                  map[string]string `json:"labels,omitempty"`
 }
 
 func (k *KeeperInfo) DeepCopy() *KeeperInfo {
