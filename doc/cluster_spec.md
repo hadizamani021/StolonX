@@ -189,8 +189,8 @@ stolon-keeper --labels="topology.kubernetes.io/zone=zone-b" ...
 
 # Keeper in zone C
 stolon-keeper --labels="topology.kubernetes.io/zone=zone-c" ...
-
-2. Run this command force only keepers in zone-a eligible to become masters
+```
+2. Run this command force to only keepers in zone-a eligible to become masters
 ```bash
 stolonctl update --patch '{
   "masterEligibilitySelector": {
@@ -199,8 +199,9 @@ stolonctl update --patch '{
     }
   }
 }'
+```
 **Result**  
 Only keepers in `zone-a` can become master. Failover will not promote replicas from other zones.
 
 > **Note**: *If no eligible keepers are available (e.g., zone failure), the cluster will not elect a new master until the configuration is updated or more keepers with matching labels become available.*  
-> *This feature does not guarantee availability across zones. It enforces a policy constraint on master election and may prevent failover if no eligible keepers are available.*
+> *This feature does not guarantee availability across zones. It enforces a policy constraint on master election and may prevent failover if no eligible keepers are available.*    
