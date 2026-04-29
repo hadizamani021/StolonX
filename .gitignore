@@ -16,3 +16,5 @@ bin/
 /release/
 
 .idea
+Dockerfile
+docker-compose.yml
