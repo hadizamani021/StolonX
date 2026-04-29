@@ -52,6 +52,9 @@ type KeeperInfo struct {
 
 	PostgresState *PostgresState `json:"postgresState,omitempty"`
 
+	// Region is an opaque deployment identifier (e.g. cloud region); used with proxy routing.
+	Region string `json:"region,omitempty"`
+
 	CanBeMaster             *bool `json:"canBeMaster,omitempty"`
 	CanBeSynchronousReplica *bool `json:"canBeSynchronousReplica,omitempty"`
 }
@@ -93,6 +96,9 @@ type PostgresState struct {
 
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
+	// InternalListenAddress and InternalPort advertise a private path for same-region proxies.
+	InternalListenAddress string `json:"internalListenAddress,omitempty"`
+	InternalPort          string `json:"internalPort,omitempty"`
 
 	Healthy bool `json:"healthy,omitempty"`
 

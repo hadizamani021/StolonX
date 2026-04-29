@@ -24,6 +24,8 @@ stolon-keeper [flags]
       --log-level string                debug, info (default), warn or error (default "info")
       --metrics-listen-address string   metrics listen address i.e "0.0.0.0:8080" (disabled by default)
       --pg-advertise-address string     postgresql instance address from outside. Use it to expose ip different than local ip with a NAT networking config
+      --pg-advertise-internal-address string optional address on a private network for same-region stolon-proxy routing (dual-homed Postgres); see ../region_proxy_routing.md
+      --pg-advertise-internal-port string optional port for pg-advertise-internal-address; defaults to advertised external port when unset
       --pg-advertise-port string        postgresql instance port from outside. Use it to expose port different than local port with a PAT networking config
       --pg-bin-path string              absolute path to postgresql binaries. If empty they will be searched in the current PATH
       --pg-listen-address string        postgresql instance listening address, local address used for the postgres instance. For all network interface, you can set the value to '*'.
@@ -36,6 +38,7 @@ stolon-keeper [flags]
       --pg-su-password string           postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.
       --pg-su-passwordfile string       postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)
       --pg-su-username string           postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.
+      --region string                   opaque region identifier for this keeper; compared by proxies when routing via internal advertise (see ../region_proxy_routing.md). Env: STKEEPER_REGION
       --store-backend string            store backend type (etcdv2/etcd, etcdv3, consul or kubernetes)
       --store-ca-file string            verify certificates of HTTPS-enabled store servers using this CA bundle
       --store-cert-file string          certificate file for client identification to the store

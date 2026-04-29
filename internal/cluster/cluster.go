@@ -578,6 +578,9 @@ type KeeperStatus struct {
 
 	CanBeMaster             *bool `json:"canBeMaster,omitempty"`
 	CanBeSynchronousReplica *bool `json:"canBeSynchronousReplica,omitempty"`
+
+	// Region is copied from KeeperInfo; opaque string compared by proxies to choose internal vs external Postgres endpoints.
+	Region string `json:"region,omitempty"`
 }
 
 type Keeper struct {
@@ -664,6 +667,9 @@ type DBStatus struct {
 
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
+	// InternalListenAddress / InternalPort mirror PostgresState for same-region proxy routing (optional).
+	InternalListenAddress string `json:"internalListenAddress,omitempty"`
+	InternalPort          string `json:"internalPort,omitempty"`
 
 	SystemID         string                   `json:"systemdID,omitempty"`
 	TimelineID       uint64                   `json:"timelineID,omitempty"`
