@@ -82,13 +82,13 @@ func keeperCanBeMaster(spec *cluster.ClusterSpec, k *cluster.Keeper) bool {
 		return false
 	}
 
-	if k.Status.CanBeMaster != nil {
-		return *k.Status.CanBeMaster
+	if k.Status.CanBeMaster != nil && *k.Status.CanBeMaster == false {
+		return false
 	}
+
 	if spec.MasterEligibilitySelector != nil && len(spec.MasterEligibilitySelector.MatchLabels) > 0 {
 		return labelsMatchSelector(k.Status.Labels, spec.MasterEligibilitySelector)
 	}
-	
 	return true
 }
 
@@ -812,7 +812,27 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 			}
 		}
 
+		k, ok := cd.Keepers[db.Spec.KeeperUID]
+		if !ok {
+			log.Infow(
+				"ignoring keeper since it does not exist in cluster data",
+				"db", db.UID,
+				"keeper", db.Spec.KeeperUID,
+			)
+			continue
+		}
+		if !keeperCanBeMaster(cd.Cluster.Spec, k) {
+			log.Infow(
+				"ignoring keeper since its labels do not match cluster eligibility selectors or it cannot be master (--can-be-master=false)",
+				"db", db.UID,
+				"keeper", db.Spec.KeeperUID,
+				"labels", k.Status.Labels,
+			)
+			continue
+		}
+
 		bestNewMasters = append(bestNewMasters, db)
+
 	}
 
 	// Sort by XLogPos
