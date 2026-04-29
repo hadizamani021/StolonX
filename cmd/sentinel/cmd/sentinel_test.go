@@ -51,7 +51,7 @@ func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "no selector falls back to canBeMaster true",
+			name: "canBeMaster true",
 			spec: &cluster.ClusterSpec{},
 			keeper: &cluster.Keeper{
 				Status: cluster.KeeperStatus{
@@ -61,7 +61,7 @@ func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "no selector falls back to canBeMaster false",
+			name: "canBeMaster false",
 			spec: &cluster.ClusterSpec{},
 			keeper: &cluster.Keeper{
 				Status: cluster.KeeperStatus{
@@ -79,7 +79,7 @@ func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "matching selector is true",
+			name: "ignore matching selector if canBeMaster is set",
 			spec: &cluster.ClusterSpec{
 				MasterEligibilitySelector: &cluster.LabelSelector{
 					MatchLabels: map[string]string{
@@ -92,25 +92,6 @@ func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
 					CanBeMaster: &cannotBeMaster,
 					Labels: map[string]string{
 						"topology.kubernetes.io/zone": "zone-a",
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "non matching selector is false even if canBeMaster true",
-			spec: &cluster.ClusterSpec{
-				MasterEligibilitySelector: &cluster.LabelSelector{
-					MatchLabels: map[string]string{
-						"topology.kubernetes.io/zone": "zone-a",
-					},
-				},
-			},
-			keeper: &cluster.Keeper{
-				Status: cluster.KeeperStatus{
-					CanBeMaster: &canBeMaster,
-					Labels: map[string]string{
-						"topology.kubernetes.io/zone": "zone-b",
 					},
 				},
 			},
@@ -133,7 +114,7 @@ func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "empty selector falls back to canBeMaster",
+			name: "empty selector and nil canBeMaster returns true",
 			spec: &cluster.ClusterSpec{
 				MasterEligibilitySelector: &cluster.LabelSelector{
 					MatchLabels: map[string]string{},
@@ -141,10 +122,10 @@ func TestKeeperCanBeMasterWithMasterEligibilitySelector(t *testing.T) {
 			},
 			keeper: &cluster.Keeper{
 				Status: cluster.KeeperStatus{
-					CanBeMaster: &cannotBeMaster,
+					CanBeMaster: nil,
 				},
 			},
-			want: false,
+			want: true,
 		},
 	}
 

@@ -15,7 +15,7 @@ Some options in a running cluster specification can be changed to update the des
 | Name                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Required                  | Type              | Default                                                                                                                             |
 |----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|-------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | sleepInterval                    | interval to wait before next check (for keepers and sentinels).                                                                                                                                                                                                                                                                                                                                                                                                                   | no                        | string (duration) | 5s
-| masterEligibilitySelector        | Selector used by the sentinel to decide which keepers are eligible to become the master. If not defined or empty, sentinels fall back to the keeper's `--can-be-master` flag. Only `matchLabels` is supported. Matching is exact on both key and value. This can be updated dynamically with `stolonctl update` without restarting keepers. | no                        | object                   | null                                                                                                                                |                                                                                                                                  |
+| masterEligibilitySelector        | Selector used by the sentinel to decide which keepers are eligible to become the master. If `--can-be-master` is defined the selector is ignored. Only `matchLabels` is supported. Matching is exact on both key and value. This can be updated dynamically with `stolonctl update` without restarting keepers. | no                        | object                   | null                                                                                                                                |                                                                                                                                  |
 | requestTimeout                   | time after which any request to external resources (store, postgres queries etc...) will fail.                                                                                                                                                                                                                                                                                                                                                                                    | no                        | string (duration) | 10s                                                                                                                                 |
 | failInterval                     | interval after the first fail to declare a keeper as not healthy.                                                                                                                                                                                                                                                                                                                                                                                                                 | no                        | string (duration) | 20s                                                                                                                                 |
 | proxyCheckInterval               | interval to wait before next proxy check.                                                                                                                                                                                                                                                                                                                                                                                                                                         | no                        | string (duration) | 5s                                                                                                                                  |
@@ -167,7 +167,7 @@ stolonctl --cluster-name=mycluster update --patch '{ "pgParameters" : null }'
 You can restrict which keepers are allowed to be elected master by setting a `masterEligibilitySelector` in the cluster specification.
 
 **Behaviour**
-- If `masterEligibilitySelector` is not defined or is empty, Stolon falls back to the traditional `--can-be-master` flag on each keeper.
+- If `--can-be-master` is explicitly set on a keeper (true or false), it always takes precedence over `masterEligibilitySelector`
 - Label matching is **exact** (both key and value must match).
 - Only `matchLabels` is supported.
 - This configuration can be updated **dynamically** using `stolonctl update` without restarting keepers.
@@ -190,7 +190,8 @@ stolon-keeper --labels="topology.kubernetes.io/zone=zone-b" ...
 # Keeper in zone C
 stolon-keeper --labels="topology.kubernetes.io/zone=zone-c" ...
 ```
-2. Run this command force to only keepers in zone-a eligible to become masters
+2. Do not explicitly set `--can-be-master` on these keepers, or ensure it is unset.
+3. Apply selectors:
 ```bash
 stolonctl update --patch '{
   "masterEligibilitySelector": {
@@ -201,7 +202,7 @@ stolonctl update --patch '{
 }'
 ```
 **Result**  
-Only keepers in `zone-a` can become master. Failover will not promote replicas from other zones.
+Only keepers in `zone-a` *whose `--can-be-master`* is not explicitly set can become master. Failover will not promote replicas from other zones.
 
 > **Note**: *If no eligible keepers are available (e.g., zone failure), the cluster will not elect a new master until the configuration is updated or more keepers with matching labels become available.*  
 > *This feature does not guarantee availability across zones. It enforces a policy constraint on master election and may prevent failover if no eligible keepers are available.*    

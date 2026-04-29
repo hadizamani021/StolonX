@@ -81,14 +81,14 @@ func keeperCanBeMaster(spec *cluster.ClusterSpec, k *cluster.Keeper) bool {
 	if k == nil {
 		return false
 	}
-	if spec.MasterEligibilitySelector != nil && len(spec.MasterEligibilitySelector.MatchLabels) > 0 {
-		return labelsMatchSelector(k.Status.Labels, spec.MasterEligibilitySelector)
-	}
 
-	//backward compatibility
 	if k.Status.CanBeMaster != nil {
 		return *k.Status.CanBeMaster
 	}
+	if spec.MasterEligibilitySelector != nil && len(spec.MasterEligibilitySelector.MatchLabels) > 0 {
+		return labelsMatchSelector(k.Status.Labels, spec.MasterEligibilitySelector)
+	}
+	
 	return true
 }
 
