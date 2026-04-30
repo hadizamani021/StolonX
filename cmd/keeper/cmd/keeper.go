@@ -101,6 +101,8 @@ type config struct {
 	debug              bool
 	pgListenAddress    string
 	pgAdvertiseAddress string
+	pgAdvertiseInternalAddress string
+	pgAdvertiseInternalPort    string
 	pgPort             string
 	pgAdvertisePort    string
 	pgBinPath          string
@@ -117,6 +119,8 @@ type config struct {
 	canBeSynchronousReplica bool
 	disableDataDirLocking   bool
 	labels                  map[string]string
+
+	region string
 }
 
 var cfg config
@@ -129,6 +133,8 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address, local address used for the postgres instance. For all network interface, you can set the value to '*'.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseAddress, "pg-advertise-address", "", "postgresql instance address from outside. Use it to expose ip different than local ip with a NAT networking config")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseInternalAddress, "pg-advertise-internal-address", "", "optional address on a private network for same-region stolon-proxy routing (dual-homed Postgres).")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseInternalPort, "pg-advertise-internal-port", "", "optional port for pg-advertise-internal-address; defaults to the advertised external port (--pg-advertise-port or --pg-port)")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertisePort, "pg-advertise-port", "", "postgresql instance port from outside. Use it to expose port different than local port with a PAT networking config")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
@@ -145,6 +151,8 @@ func init() {
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.disableDataDirLocking, "disable-data-dir-locking", false, "disable locking on data dir. Warning! It'll cause data corruptions if two keepers are concurrently running with the same data dir.")
 	CmdKeeper.PersistentFlags().StringToStringVar(&cfg.labels, "labels", nil, "keeper labels, comma-separated key=value pairs")
+
+	CmdKeeper.PersistentFlags().StringVar(&cfg.region, "region", "", "opaque region identifier for this keeper; must match stolon-proxy --region when routing via internal advertise address")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
@@ -485,6 +493,8 @@ type PostgresKeeper struct {
 	dataDir            string
 	pgListenAddress    string
 	pgAdvertiseAddress string
+	pgAdvertiseInternalAddress string
+	pgAdvertiseInternalPort    string
 	pgPort             string
 	pgAdvertisePort    string
 	pgBinPath          string
@@ -514,6 +524,8 @@ type PostgresKeeper struct {
 
 	canBeMaster             *bool
 	canBeSynchronousReplica *bool
+
+	region string
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
@@ -537,6 +549,8 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		pgListenAddress:    cfg.pgListenAddress,
 		pgAdvertiseAddress: cfg.pgAdvertiseAddress,
+		pgAdvertiseInternalAddress: cfg.pgAdvertiseInternalAddress,
+		pgAdvertiseInternalPort:    cfg.pgAdvertiseInternalPort,
 		pgPort:             cfg.pgPort,
 		pgAdvertisePort:    cfg.pgAdvertisePort,
 		pgBinPath:          cfg.pgBinPath,
@@ -555,6 +569,8 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		canBeMaster:             &cfg.canBeMaster,
 		canBeSynchronousReplica: &cfg.canBeSynchronousReplica,
+
+		region: cfg.region,
 
 		e:   e,
 		end: end,
@@ -618,6 +634,7 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 		UID:        keeperUID,
 		ClusterUID: clusterUID,
 		BootUUID:   p.bootUUID,
+		Region:     p.region,
 		PostgresBinaryVersion: cluster.PostgresBinaryVersion{
 			Maj: maj,
 			Min: min,
@@ -728,6 +745,8 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 
 	pgState.ListenAddress = p.pgAdvertiseAddress
 	pgState.Port = p.pgAdvertisePort
+	pgState.InternalListenAddress = p.pgAdvertiseInternalAddress
+	pgState.InternalPort = p.pgAdvertiseInternalPort
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {

@@ -55,6 +55,8 @@ type KeeperInfo struct {
 	CanBeMaster             *bool             `json:"canBeMaster,omitempty"`
 	CanBeSynchronousReplica *bool             `json:"canBeSynchronousReplica,omitempty"`
 	Labels                  map[string]string `json:"labels,omitempty"`
+	// Region is an opaque deployment identifier (e.g. cloud region); used with proxy routing.
+	Region string `json:"region,omitempty"`
 }
 
 func (k *KeeperInfo) DeepCopy() *KeeperInfo {
@@ -94,6 +96,9 @@ type PostgresState struct {
 
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
+	// InternalListenAddress and InternalPort advertise a private path for same-region proxies.
+	InternalListenAddress string `json:"internalListenAddress,omitempty"`
+	InternalPort          string `json:"internalPort,omitempty"`
 
 	Healthy bool `json:"healthy,omitempty"`
 

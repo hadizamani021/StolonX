@@ -53,6 +53,8 @@ type config struct {
 	stopListening bool
 	debug         bool
 
+	region string
+
 	keepAliveIdle     int
 	keepAliveCount    int
 	keepAliveInterval int
@@ -67,6 +69,7 @@ func init() {
 	CmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+	CmdProxy.PersistentFlags().StringVar(&cfg.region, "region", "", "opaque region identifier for this proxy; when set (and matching the master keeper region), connect via internalListenAddress from cluster data")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
@@ -80,6 +83,8 @@ type ClusterChecker struct {
 	uid           string
 	listenAddress string
 	port          string
+
+	region string
 
 	stopListening bool
 
@@ -105,6 +110,7 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 		uid:              uid,
 		listenAddress:    cfg.listenAddress,
 		port:             cfg.port,
+		region:           cfg.region,
 		stopListening:    cfg.stopListening,
 		e:                e,
 		endPollonProxyCh: make(chan error),
@@ -186,6 +192,25 @@ func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, proxyTime
 	return nil
 }
 
+// proxyMasterEndpoint chooses external (advertised) vs internal Postgres host/port for this proxy.
+func proxyMasterEndpoint(proxyRegion string, db *cluster.DB, masterKeeper *cluster.Keeper) (host, port string, internal bool) {
+	if db == nil {
+		return "", "", false
+	}
+	extHost := db.Status.ListenAddress
+	extPort := db.Status.Port
+	intHost := db.Status.InternalListenAddress
+	intPort := db.Status.InternalPort
+	if intPort == "" {
+		intPort = extPort
+	}
+	if proxyRegion != "" && masterKeeper != nil && masterKeeper.Status.Region != "" &&
+		proxyRegion == masterKeeper.Status.Region && intHost != "" {
+		return intHost, intPort, true
+	}
+	return extHost, extPort, false
+}
+
 // Check reads the cluster data and applies the right pollon configuration.
 func (c *ClusterChecker) Check() error {
 	cd, _, err := c.e.GetClusterData(context.TODO())
@@ -259,13 +284,28 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(db.Status.ListenAddress, db.Status.Port))
+	masterKeeper := cd.Keepers[db.Spec.KeeperUID]
+	host, port, internalRoute := proxyMasterEndpoint(c.region, db, masterKeeper)
+	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		log.Errorw("cannot resolve db address", zap.Error(err))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
-	log.Infow("master address", "address", addr)
+	masterKeeperRegion := ""
+	if masterKeeper != nil {
+		masterKeeperRegion = masterKeeper.Status.Region
+	}
+	route := "external"
+	if internalRoute {
+		route = "internal"
+	}
+	log.Infow("master postgres endpoint",
+		"route", route,
+		"proxy_region", c.region,
+		"master_keeper_region", masterKeeperRegion,
+		"address", addr.String(),
+	)
 	if err = c.SetProxyInfo(c.e, proxy.Generation, proxyTimeout); err != nil {
 		// if we failed to update our proxy info when a master is defined we
 		// cannot ignore this error since the sentinel won't know that we exist
@@ -283,10 +323,10 @@ func (c *ClusterChecker) Check() error {
 	// start proxing only if we are inside enabledProxies, this ensures that the
 	// sentinel has read our proxyinfo and knows we are alive
 	if util.StringInSlice(proxy.Spec.EnabledProxies, c.uid) {
-		log.Infow("proxying to master address", "address", addr)
+		log.Infow("proxying to master", "route", route, "address", addr.String())
 		c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
 	} else {
-		log.Infow("not proxying to master address since we aren't in the enabled proxies list", "address", addr)
+		log.Infow("not proxying to master address since we aren't in the enabled proxies list", "route", route, "address", addr.String())
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 	}
 

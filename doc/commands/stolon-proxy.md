@@ -21,6 +21,7 @@ stolon-proxy [flags]
       --log-level string                debug, info (default), warn or error (default "info")
       --metrics-listen-address string   metrics listen address i.e "0.0.0.0:8080" (disabled by default)
       --port string                     proxy listening port (default "5432")
+      --region string                   opaque region identifier for this proxy; when set (and matching the master keeper region), connect via internal advertise data from cluster data (see ../region_proxy_routing.md).
       --stop-listening                  stop listening on store error (default true)
       --store-backend string            store backend type (etcdv2/etcd, etcdv3, consul or kubernetes)
       --store-ca-file string            verify certificates of HTTPS-enabled store servers using this CA bundle
