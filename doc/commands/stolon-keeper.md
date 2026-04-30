@@ -38,7 +38,7 @@ stolon-keeper [flags]
       --pg-su-password string           postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.
       --pg-su-passwordfile string       postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)
       --pg-su-username string           postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.
-      --region string                   opaque region identifier for this keeper; compared by proxies when routing via internal advertise (see ../region_proxy_routing.md). Env: STKEEPER_REGION
+      --region string                   opaque region identifier for this keeper; compared by proxies when routing via internal advertise (see ../region_proxy_routing.md).
       --store-backend string            store backend type (etcdv2/etcd, etcdv3, consul or kubernetes)
       --store-ca-file string            verify certificates of HTTPS-enabled store servers using this CA bundle
       --store-cert-file string          certificate file for client identification to the store

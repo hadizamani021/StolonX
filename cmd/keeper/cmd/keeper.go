@@ -132,7 +132,7 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address, local address used for the postgres instance. For all network interface, you can set the value to '*'.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseAddress, "pg-advertise-address", "", "postgresql instance address from outside. Use it to expose ip different than local ip with a NAT networking config")
-	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseInternalAddress, "pg-advertise-internal-address", "", "optional address on a private network for same-region stolon-proxy routing (dual-homed Postgres); requires matching proxy and sentinel versions")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseInternalAddress, "pg-advertise-internal-address", "", "optional address on a private network for same-region stolon-proxy routing (dual-homed Postgres).")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseInternalPort, "pg-advertise-internal-port", "", "optional port for pg-advertise-internal-address; defaults to the advertised external port (--pg-advertise-port or --pg-port)")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertisePort, "pg-advertise-port", "", "postgresql instance port from outside. Use it to expose port different than local port with a PAT networking config")

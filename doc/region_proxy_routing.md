@@ -4,8 +4,6 @@ Multi-region deployments can expose PostgreSQL on **two addresses**: a **public*
 
 Stolon compares an opaque **region** string on the proxy (`--region`) with the primary keeper’s region from cluster data (`Keeper.Status.Region`, sourced from keeper `--region`). When they match (both non-empty and equal) **and** an internal advertise address is published in `DB.Status`, the proxy connects via **internal** host/port; otherwise it uses the usual advertised address (`ListenAddress` / `Port`), unchanged from older releases.
 
-This mechanism does **not** use cluster spec labels or label selectors (see cluster specification docs).
-
 ## Operational checklist (dual-homed PostgreSQL)
 
 1. Configure Postgres to listen on the interfaces that serve both paths (`listen_addresses`, `pg_hba.conf`). Validate connectivity on **both** addresses before relying on routing.
