@@ -65,6 +65,10 @@ const (
 	DefaultMaxSynchronousStandbys    uint16           = 1
 	DefaultAdditionalWalSenders                       = 5
 	DefaultUsePgrewind                                = false
+	// DefaultPgRewindRetryMaxAttempts is 1: a single pg_rewind run per resync (no retries) before pg_basebackup.
+	DefaultPgRewindRetryMaxAttempts         uint32        = 1
+	DefaultPgRewindRetryInterval            time.Duration = 0
+	DefaultPgRewindRetryBackoffMultiplier   float64       = 1
 	DefaultMergePGParameter                           = true
 	DefaultRole                      ClusterRole      = ClusterRoleMaster
 	DefaultSUReplAccess              SUReplAccessMode = SUReplAccessAll
@@ -213,6 +217,29 @@ func SUReplAccessModeP(s SUReplAccessMode) *SUReplAccessMode {
 	return &s
 }
 
+// PgRewindRetryPolicy configures pg_rewind retries before falling back to pg_basebackup.
+type PgRewindRetryPolicy struct {
+	// MaxAttempts is the total number of pg_rewind runs per resync, including the first run (minimum 1).
+	// Omitted or zero defaults to DefaultPgRewindRetryMaxAttempts (single attempt, no retries).
+	MaxAttempts uint32 `json:"maxAttempts,omitempty"`
+	// Interval is the base delay before the second run; before run k (k>=2) the delay is Interval * BackoffMultiplier^(k-2).
+	// Omitted or zero defaults to DefaultPgRewindRetryInterval.
+	Interval Duration `json:"interval,omitempty"`
+	// BackoffMultiplier scales the delay after each failed run (must be >= 1). 1 means a fixed delay between attempts.
+	// Omitted or zero defaults to DefaultPgRewindRetryBackoffMultiplier.
+	BackoffMultiplier float64 `json:"backoffMultiplier,omitempty"`
+}
+
+// DefaultPgRewindRetryPolicy returns the policy used when pgRewindRetry is absent from the cluster spec:
+// one pg_rewind attempt only (no retries), then pg_basebackup on failure.
+func DefaultPgRewindRetryPolicy() PgRewindRetryPolicy {
+	return PgRewindRetryPolicy{
+		MaxAttempts:       DefaultPgRewindRetryMaxAttempts,
+		Interval:          Duration{Duration: DefaultPgRewindRetryInterval},
+		BackoffMultiplier: DefaultPgRewindRetryBackoffMultiplier,
+	}
+}
+
 type ClusterSpec struct {
 	// Interval to wait before next check
 	SleepInterval *Duration `json:"sleepInterval,omitempty"`
@@ -268,6 +295,9 @@ type ClusterSpec struct {
 	AdditionalMasterReplicationSlots []string `json:"additionalMasterReplicationSlots"`
 	// Whether to use pg_rewind
 	UsePgrewind *bool `json:"usePgrewind,omitempty"`
+	// PgRewindRetry configures optional retries when pg_rewind fails during resync before falling back to pg_basebackup.
+	// Omitted: single pg_rewind attempt only (DefaultPgRewindRetryPolicy).
+	PgRewindRetry *PgRewindRetryPolicy `json:"pgRewindRetry,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
 	InitMode *ClusterInitMode `json:"initMode,omitempty"`
 	// Whether to merge pgParameters of the initialized db cluster, useful
@@ -392,6 +422,17 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	}
 	if s.UsePgrewind == nil {
 		s.UsePgrewind = BoolP(DefaultUsePgrewind)
+	}
+	if s.PgRewindRetry == nil {
+		d := DefaultPgRewindRetryPolicy()
+		s.PgRewindRetry = &d
+	} else {
+		if s.PgRewindRetry.MaxAttempts == 0 {
+			s.PgRewindRetry.MaxAttempts = DefaultPgRewindRetryMaxAttempts
+		}
+		if s.PgRewindRetry.BackoffMultiplier == 0 {
+			s.PgRewindRetry.BackoffMultiplier = DefaultPgRewindRetryBackoffMultiplier
+		}
 	}
 	if s.MinSynchronousStandbys == nil {
 		s.MinSynchronousStandbys = Uint16P(DefaultMinSynchronousStandbys)
@@ -525,6 +566,16 @@ func (os *ClusterSpec) Validate() error {
 		}
 	default:
 		return fmt.Errorf("unknown role: %q", *s.InitMode)
+	}
+	pr := s.PgRewindRetry
+	if pr.MaxAttempts < 1 {
+		return fmt.Errorf("pgRewindRetry.maxAttempts must be at least 1")
+	}
+	if pr.Interval.Duration < 0 {
+		return fmt.Errorf("pgRewindRetry.interval must not be negative")
+	}
+	if pr.BackoffMultiplier < 1 {
+		return fmt.Errorf("pgRewindRetry.backoffMultiplier must be at least 1")
 	}
 	return nil
 }

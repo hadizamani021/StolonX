@@ -61,6 +61,7 @@ type ClusterSpecNoDefaults struct {
 	AdditionalWalSenders             *uint16                   `json:"additionalWalSenders,omitempty"`
 	AdditionalMasterReplicationSlots []string                  `json:"additionalMasterReplicationSlots,omitempty"`
 	UsePgrewind                      *bool                     `json:"usePgrewind,omitempty"`
+	PgRewindRetry                    *cluster.PgRewindRetryPolicy `json:"pgRewindRetry,omitempty"`
 	InitMode                         *cluster.ClusterInitMode  `json:"initMode,omitempty"`
 	MergePgParameters                *bool                     `json:"mergePgParameters,omitempty"`
 	Role                             *cluster.ClusterRole      `json:"role,omitempty"`
@@ -95,6 +96,7 @@ type ClusterSpecDefaults struct {
 	AdditionalWalSenders             *uint16                   `json:"additionalWalSenders"`
 	AdditionalMasterReplicationSlots []string                  `json:"additionalMasterReplicationSlots"`
 	UsePgrewind                      *bool                     `json:"usePgrewind"`
+	PgRewindRetry                    *cluster.PgRewindRetryPolicy `json:"pgRewindRetry"`
 	InitMode                         *cluster.ClusterInitMode  `json:"initMode"`
 	MergePgParameters                *bool                     `json:"mergePgParameters"`
 	Role                             *cluster.ClusterRole      `json:"role"`
