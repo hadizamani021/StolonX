@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -917,7 +918,18 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 	}
 }
 
-func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, tryPgrewind bool) error {
+func pgRewindRetryBackoffDelay(retryIndex uint32, interval time.Duration, backoff float64) time.Duration {
+	if retryIndex < 1 || interval <= 0 {
+		return 0
+	}
+	if backoff < 1 {
+		backoff = 1
+	}
+	return time.Duration(float64(interval) * math.Pow(backoff, float64(retryIndex-1)))
+}
+
+// clusterDefSpec must be cd.Cluster.DefSpec() (or equivalent) so pgRewindRetry defaults apply; may be nil to use built-in defaults only.
+func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, clusterDefSpec *cluster.ClusterSpec, tryPgrewind bool) error {
 	pgm := p.pgm
 	replConnParams := p.getReplConnParams(db, followedDB)
 	standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
@@ -934,13 +946,35 @@ func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, tryPgrewin
 		// rewind that it targets the current primary, rather than whatever database we
 		// follow.
 		connParams := p.getSUConnParams(db, masterDB)
-		log.Infow("syncing using pg_rewind", "masterDB", masterDB.UID, "keeper", followedDB.Spec.KeeperUID)
-		if err := pgm.SyncFromFollowedPGRewind(connParams, p.pgSUPassword); err != nil {
-			// log pg_rewind error and fallback to pg_basebackup
-			log.Errorw("error syncing with pg_rewind", zap.Error(err))
-		} else {
-			pgm.SetRecoveryOptions(p.createRecoveryOptions(pg.RecoveryModeStandby, standbySettings, nil, nil))
-			return nil
+		policy := cluster.DefaultPgRewindRetryPolicy()
+		if clusterDefSpec != nil && clusterDefSpec.PgRewindRetry != nil {
+			policy = *clusterDefSpec.PgRewindRetry
+		}
+		maxAttempts := policy.MaxAttempts
+		if maxAttempts < 1 {
+			maxAttempts = cluster.DefaultPgRewindRetryMaxAttempts
+		}
+		backoff := policy.BackoffMultiplier
+		if backoff < 1 {
+			backoff = cluster.DefaultPgRewindRetryBackoffMultiplier
+		}
+		baseInterval := policy.Interval.Duration
+		for attempt := uint32(1); attempt <= maxAttempts; attempt++ {
+			if attempt > 1 {
+				delay := pgRewindRetryBackoffDelay(attempt-1, baseInterval, backoff)
+				log.Infow("waiting before pg_rewind retry", "attempt", attempt, "maxAttempts", maxAttempts, "delay", delay)
+				time.Sleep(delay)
+			}
+			log.Infow("syncing using pg_rewind", "masterDB", masterDB.UID, "keeper", followedDB.Spec.KeeperUID, "attempt", attempt, "maxAttempts", maxAttempts)
+			if err := pgm.SyncFromFollowedPGRewind(connParams, p.pgSUPassword); err != nil {
+				log.Errorw("error syncing with pg_rewind", "attempt", attempt, "maxAttempts", maxAttempts, zap.Error(err))
+				if attempt == maxAttempts {
+					log.Infow("pg_rewind failed after all attempts, falling back to pg_basebackup")
+				}
+			} else {
+				pgm.SetRecoveryOptions(p.createRecoveryOptions(pg.RecoveryModeStandby, standbySettings, nil, nil))
+				return nil
+			}
 		}
 	}
 
@@ -1399,7 +1433,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// wals and we'll force a full resync.
 			// We have to find a better way to detect if a standby is waiting
 			// for unavailable wals.
-			if err = p.resync(db, masterDB, followedDB, tryPgrewind); err != nil {
+			if err = p.resync(db, masterDB, followedDB, cd.Cluster.DefSpec(), tryPgrewind); err != nil {
 				log.Errorw("failed to resync from followed instance", zap.Error(err))
 				return
 			}
@@ -1433,7 +1467,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 						log.Errorw("failed to stop pg instance", zap.Error(err))
 						return
 					}
-					if err = p.resync(db, masterDB, followedDB, false); err != nil {
+					if err = p.resync(db, masterDB, followedDB, cd.Cluster.DefSpec(), false); err != nil {
 						log.Errorw("failed to resync from followed instance", zap.Error(err))
 						return
 					}
